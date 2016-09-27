@@ -17,6 +17,9 @@ class HttpPipelineElementMeta(type):
             or (
                 name == 'HttpPipelineElement' and bases == (object,)
             )
+            or (
+                issubclass(cls, HttpPipeline)
+            )
         ):
             raise TypeError(
                 'HttpPipelineElement subclasses must have at least '
@@ -45,8 +48,8 @@ class HttpPipelineElement(object):
     def apply(self, context, **kwargs):
         return kwargs
 
-    def resolve(self, context, **kwargs):
-        return kwargs
+    def resolve(self, context, response):
+        return response
 
     def _apply(self, context, **kwargs):
         unique_context = ContextWrapper(self.id, context)
@@ -135,3 +138,19 @@ class HttpPipeline(HttpPipelineElement):
     def request(self, **kwargs):
         context = Context()
         return self.apply(context, **kwargs)
+
+class DefinedPipeline(HttpPipeline):
+
+    elements = []
+
+    def __init__(self):
+        steps = []
+        for each in self.elements:
+            steps.append(self._initialize_element(each))
+        super(DefinedPipeline, self).__init__(*steps)
+
+    def _initialize_element(self, element):
+        if isinstance(element, HttpPipelineElement):
+            return element
+        else:
+            return element()
