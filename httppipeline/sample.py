@@ -2,6 +2,18 @@ from urllib3 import PoolManager
 
 from httppipeline.base import HttpPipeline, DefinedPipeline, HttpPipelineElement, ReverseResponse
 
+from httppipeline.elements import (
+    CustomHeaderElement,
+    CustomQueryElement,
+    CustomFormFieldElement,
+    CustomUrlTemplateElement,
+    UrlHandlingElement,
+    FieldHandlingElement,
+    HttpFormBodyEncodingElement,
+    JsonCodingElement,
+    Urllib3RequestElement
+)
+
 class Fake503(object):
     code = 503
     def __repr__(self):
@@ -33,8 +45,35 @@ class PrinterElement(HttpPipelineElement):
         return kwargs
 
     def resolve(self, context, response):
-        print(response)
         return response
+
+
+class HttpBinPostJsonVerifier(HttpPipelineElement):
+
+    def apply(self, context, **kwargs):
+        context.save('initial_kwargs', kwargs.copy())
+        kwargs = {
+            'url': 'http://httpbin.org/post',
+            'method': 'POST',
+            'json': kwargs
+        }
+        return kwargs
+
+    def resolve(self, context, response):
+        original = context.get('initial_kwargs')
+        if response['json'] == original:
+            return 'They equal! \n{}'.format(original)
+        else:
+            return 'They don\'t equal.\n{}\n{}'.format(original, response['json'])
+
+
+class JsonMangler(HttpPipelineElement):
+
+    def apply(self, context, json=None, **kwargs):
+        if json is not None:
+            json['thingy'] = 'hehehe'
+            kwargs['json'] = json
+            return kwargs
 
 class Raise503Element(HttpPipelineElement):
 
@@ -46,4 +85,28 @@ class FakeErrorRetryPipeline(DefinedPipeline):
         Retry503Element(max_retries=2),
         PrinterElement,
         Raise503Element
+    )
+
+class RealHttpPipeline(DefinedPipeline):
+    elements = (
+        JsonCodingElement,
+        FieldHandlingElement,
+        UrlHandlingElement,
+        HttpFormBodyEncodingElement,
+        PrinterElement,
+        Urllib3RequestElement,
+    )
+
+class JsonVerifierPipeline(DefinedPipeline):
+    elements = (
+        HttpBinPostJsonVerifier,
+        RealHttpPipeline
+    )
+
+
+class ManglingJsonVerifierPipeline(DefinedPipeline):
+    elements = (
+        HttpBinPostJsonVerifier,
+        JsonMangler,
+        RealHttpPipeline
     )

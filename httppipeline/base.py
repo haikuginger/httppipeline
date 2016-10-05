@@ -7,27 +7,7 @@ from httppipeline.context import Context, ContextWrapper
 def has_callable_attr(obj, attr_name):
     return hasattr(obj, attr_name) and hasattr(getattr(obj, attr_name), '__call__')
 
-class HttpPipelineElementMeta(type):
 
-    def __init__(cls, name, bases, dct):
-        if not (
-            any(
-                method in dct and hasattr(dct[method], '__call__') for method in ('apply', 'resolve')
-            )
-            or (
-                name == 'HttpPipelineElement' and bases == (object,)
-            )
-            or (
-                issubclass(cls, HttpPipeline)
-            )
-        ):
-            raise TypeError(
-                'HttpPipelineElement subclasses must have at least '
-                'one callable method named \'apply\' or \'resolve\'.'
-            )
-        super(HttpPipelineElementMeta, cls).__init__(name, bases, dct)
-
-@six.add_metaclass(HttpPipelineElementMeta)
 class HttpPipelineElement(object):
     
     def __init__(self):
@@ -59,14 +39,17 @@ class HttpPipelineElement(object):
         unique_context = ContextWrapper(self.id, context)
         return self.resolve(unique_context, response)
 
+
 class PipelineDirections(object):
     forward = 1
     reverse = -1 
+
 
 class ReverseResponse(object):
 
     def __init__(self, value):
         self.value = value
+
 
 class HttpPipeline(HttpPipelineElement):
 
@@ -98,10 +81,12 @@ class HttpPipeline(HttpPipelineElement):
         try:
             for element in self.steps(start_at=start_at, direction=PipelineDirections.forward):
                 element_id = element.id
-                kwargs = element._apply(context, **kwargs)
+                next_val = element._apply(context, **kwargs)
+                if next_val is not None:
+                    kwargs = next_val
                 if isinstance(kwargs, ReverseResponse):
                     return self.resolve(context, kwargs.value, start_at=element_id)
-            return self.resolve(context, kwargs)
+            return kwargs
         except Exception as e:
             return self._handle_exception(context, e, location=element_id)
 
@@ -110,7 +95,9 @@ class HttpPipeline(HttpPipelineElement):
         try:
             for element in self.steps(start_at=start_at, direction=PipelineDirections.reverse):
                 element_id = element.id
-                response = element._resolve(context, response)
+                next_val = element._resolve(context, response)
+                if next_val is not None:
+                    response = next_val
                 if isinstance(response, ReverseResponse):
                     return self.apply(context, start_at=element_id, **response.value)
             return response
@@ -137,7 +124,9 @@ class HttpPipeline(HttpPipelineElement):
 
     def request(self, **kwargs):
         context = Context()
-        return self.apply(context, **kwargs)
+        response = self.apply(context, **kwargs)
+        return self.resolve(context, response)
+
 
 class DefinedPipeline(HttpPipeline):
 
