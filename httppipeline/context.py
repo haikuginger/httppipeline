@@ -11,7 +11,7 @@ class ContextWrapper(object):
         return self.context._get(self.element_id, key, default)
 
     def pop(self, key, default=None):
-        return self.context.pop(self.element_id, key, default)
+        return self.context._pop(self.element_id, key, default)
 
 class Context(dict):
 

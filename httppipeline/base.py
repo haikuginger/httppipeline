@@ -120,7 +120,7 @@ class HttpPipeline(HttpPipelineElement):
         raise error
 
     def handle_exception(self, context, error):
-        return self._handle_exception
+        return self._handle_exception(context, error)
 
     def request(self, **kwargs):
         context = Context()
